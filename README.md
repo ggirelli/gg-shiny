@@ -1,7 +1,7 @@
 gg-shiny
 ===
 
-Web-interface apps, powered by R-Shiny and plotly, to easily generate plots for a variety of projects.
+Web-interface apps, powered by [R-shiny](https://shiny.rstudio.com/) and [plotly](https://plot.ly/), to easily generate plots for a variety of projects.
 
 ### Installation
 ```
