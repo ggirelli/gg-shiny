@@ -1,0 +1,74 @@
+#!/usr/bin/Rscript
+
+# ------------------------------------------------------------------------------
+# 
+# Author: Gabriele Girelli
+# Email: gigi.ga90@gmail.com
+# Version: 1.0.0
+# Description: to run shiny apps in this folder.
+# 
+# ------------------------------------------------------------------------------
+
+
+
+# DEPENDENCIES =================================================================
+
+suppressMessages(library(argparser))
+suppressMessages(library(shiny))
+
+# INPUT ========================================================================
+
+# Create arguent parser
+parser = arg_parser('To run shiny apps in this folder.', name = 'runApp')
+
+# Define mandatory arguments
+parser = add_argument(parser, arg = 'app',
+	help = 'Name/Path to app folder.')
+
+
+# Define elective arguments
+parser = add_argument(parser, arg = '--port', short = '-p', type = class(0),
+    help = 'TCP port.', default = 4040, nargs = 1)
+
+# Define elective arguments
+parser = add_argument(parser, arg = '--host', short = '-h', type = class(""),
+    help = 'TCP port.', default = "0.0.0.0",
+    nargs = 1)
+
+# Parse arguments
+p = parse_args(parser)
+
+# Attach argument values to variables
+attach(p['' != names(p)])
+
+# FUNCTIONS ====================================================================
+
+getScriptPath <- function(){
+	# From https://stackoverflow.com/a/24020199
+    cmd.args <- commandArgs()
+    m <- regexpr("(?<=^--file=).+", cmd.args, perl=TRUE)
+    script.dir <- dirname(regmatches(cmd.args, m))
+    if(length(script.dir) == 0) {
+    	stop("can't determine script dir: please call the script with Rscript")
+    }
+    if(length(script.dir) > 1) {
+    	stop(paste0("can't determine script dir: more than one",
+    		" '--file' argument detected"))
+    }
+    return(script.dir)
+}
+
+# RUN ==========================================================================
+
+# Extract absolute path to app folder
+appDir = paste0(getScriptPath(), '/', app, '/')
+
+# Check if folder exists
+if( !dir.exists(appDir) ) stop(paste0("Cannot find app '", app, "'."))
+
+# Run app
+runApp(appDir, host = host, port = port)
+
+# END --------------------------------------------------------------------------
+
+################################################################################
