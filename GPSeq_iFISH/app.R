@@ -1,10 +1,10 @@
 
 # --------------------------------------------------------------------------------------------------
 # 
-# Author: ...
-# Email: ...
-# Version: X.Y.Z
-# Description: ...
+# Author: Gabriele Girelli
+# Email: gigi.ga90@gmail.com
+# Version: 1.0.0
+# Description: generate plots for GPSeq and iFISH comparison.
 # 
 # --------------------------------------------------------------------------------------------------
 
