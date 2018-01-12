@@ -139,6 +139,15 @@ label2col = function(label, set) {
     return(names(which(set == label))[1])
 }
 
+gen_dlin = function(data, path) {
+    # Take single-dot data and calculate inter-probe linear/3D distance
+    # Generate linear/spatial distance information for all probe couples in a cell, per allele
+    
+    # Remove missed dots
+    data = data[data$cellID != 0,]
+
+}
+
 # PREPARE DATA =====================================================================================
 
 # Read main data
@@ -367,6 +376,12 @@ sum_types = list(
     "Median" = median
 )
 
+# Produce inter-probe distance table
+dlin_path = "data/linear_distance.tsv"
+if ( !file.exists(dlin_path) ) {
+    gen_dlin(md, dlin_path)
+}
+
 # BACK-END =========================================================================================
 
 server = function(input, output) {
@@ -553,6 +568,97 @@ server = function(input, output) {
         }
 
         p
+    })
+
+    dataPrep_perChannel = function(input) {
+        data = select_dot_data(input)
+
+        chlist = unique(data$Channel)
+
+        # remove dots outside of cells
+        data = data[0 != data$cell_ID,]
+
+        ccounts = do.call(rbind, by(data,
+            paste0(data$dataset, "~", data$File, "~", data$cell_ID),
+            FUN = function(subt) {
+                ccount = table(subt$Channel)
+                as.data.frame(lapply(chlist, FUN = function(ch) {
+                    l = list()
+
+                    if ( ch %in% names(ccount) ) {
+                        l[[ch]] = ccount[[ch]]
+                    } else {
+                        l[[ch]] = 0
+                    }
+
+                    return(l)
+                }))
+            }
+        ))
+
+        ccounts = do.call(rbind, by(
+            ccounts,
+            apply(ccounts, FUN = paste, MARGIN = 1, collapse = "~"),
+            FUN = function(subt) {
+                subt$count = nrow(subt)
+                return(subt[1,])
+            }
+        ))
+        ccounts$perc = ccounts$count / sum(ccounts$count)
+        rownames(ccounts) = c()
+
+        # Count how many cells have 2 dots per channel
+        ncell = length(unique(paste0(
+            data$dataset, "~", data$File, "~", data$cell_ID)))
+        n1 = ccounts$count[apply(ccounts, MARGIN = 1,
+            FUN = function(row) { all(1 == row[1:3]) })]
+        n2 = ccounts$count[apply(ccounts, MARGIN = 1,
+            FUN = function(row) { all(2 == row[1:3]) })]
+
+        data = list(ccounts, ncell, n1, n2)
+
+        return(data)
+    }
+
+    output$dots_perChannel = renderPlotly({
+        data = dataPrep_perChannel(input)
+
+        m <- list(
+          l = 50,
+          r = 50,
+          b = 100,
+          t = 100,
+          pad = 4
+        )
+
+        p = plot_ly(data[[1]], x = ~a594, y = ~cy5, z = ~tmr,
+            text = ~paste0("Count: ", count, "\nPerc: ", round(perc * 100, 2), "%"),
+            marker = list(color = ~log(perc),
+                colorscale = c('#FFE1A1', '#683531'),
+                showscale = F, reversescale = T,
+                symbol = 'circle', sizemode = 'diameter'
+            ),
+            size = ~perc, sizes = c(5, 50)
+        ) %>%
+        add_markers() %>%
+        layout(scene = list(
+                xaxis = list(title = 'a594'),
+                yaxis = list(title = 'cy5'),
+                zaxis = list(title = 'tmr')),
+            autosize = T, margin = m)
+        p
+    })
+
+    output$dots_perChannel_recap = renderPrint({
+        data = dataPrep_perChannel(input)
+
+        p1 = round(data[[3]] / data[[2]] * 100, 2)
+        p2 = round(data[[4]] / data[[2]] * 100, 2)
+
+        cat(paste0(p1, "% cells (", data[[3]], "/", data[[2]], ") ",
+            "have exactly 1 dot per channel.\n"))
+        cat(paste0(p2, "% cells (", data[[4]], "/", data[[2]], ") ",
+            "have exactly 2 dots per channel.\n"))
     })
 
     output$nuclei_distPlot = renderPlotly({
@@ -1049,11 +1155,16 @@ ui <- fluidPage(
                             span(": dataset(s) features.")
                         ),
                         tags$li(
-                            strong("Single-dot"), span(": single-dot data.")
+                            strong("Single-locus"), span(": single-probe data.")
                         ),
                         tags$li(
-                            strong("Allele pairs"),
-                            span(": data on dots couple per channel, considered as alleles.")
+                            strong("Inter-homologous"),
+                            span(": data on dot couples per channel, considered as alleles.",
+                                "Here alleles are defined in a channel-wise manner.")
+                        ),
+                        tags$li(
+                            strong("Inter-locus"),
+                            span(": data on dot triplets, belonging to the same allele.")
                         ),
                         tags$li(
                             strong("Specific"),
@@ -1129,6 +1240,14 @@ ui <- fluidPage(
                             uiOutput("md_factor_descr_1")
                         )
                     )
+                ),
+                tabPanel("Channels", br(),
+                    p("Here, the number of cells with a certain number of probe dots in the three ",
+                        "channels is reported as different colored/sized dots."),
+                    p("As the script needs to navigate through each single cell, the plot might ",
+                        "take some time (up to one minute) to reload."),
+                    plotlyOutput(outputId = "dots_perChannel", height = 800), br(),
+                    verbatimTextOutput(outputId = "dots_perChannel_recap")
                 ),
                 tabPanel("Nuclei distribution", br(),
                     h4(strong("NOTE:"), "cell sub-population filters do not apply to this plot.",
@@ -1293,7 +1412,7 @@ ui <- fluidPage(
         ),
 
         # Allele data ------------------------------------------------------------------------------
-        tabPanel("Allele pairs",
+        tabPanel("Inter-homologous",
             br(), p("Here you can find the data on allele couples; thus,",
                 strong("only cells with 2 alleles are considered here.")),
 
@@ -1433,6 +1552,11 @@ ui <- fluidPage(
             )
         ),
 
+        # Locus data -------------------------------------------------------------------------------
+        tabPanel("Intra-homologous",
+            br(), p("Here you can find the data on probe triplets.")
+        ),
+
         # Specific plots ---------------------------------------------------------------------------
         tabPanel("Specific",
             br(), p("Here you can specific user-requested plots and features."),
@@ -1509,7 +1633,7 @@ ui <- fluidPage(
             )
         )
 
-    , selected = "Specific"))
+    , selected = "General"))
 )
 
 # RUN ==============================================================================================
