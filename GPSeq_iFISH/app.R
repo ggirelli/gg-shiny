@@ -151,10 +151,10 @@ gen_dlin = function(data, path) {
 # PREPARE DATA =====================================================================================
 
 # Read main data
-dataset_date = "2018-01-03"
-md = read.delim("data/2018-01-03_dots.merged.tsv", as.is = T, header = T)
-mda = read.delim("data/2018-01-03_alleles.merged.tsv", as.is = T, header = T)
-nd = read.delim("data/2018-01-03_nuclei.merged.tsv", as.is = T, header = T)
+dataset_date = "2018-01-15"
+md = read.delim(paste0("data/", dataset_date, "_dots.merged.tsv"), as.is = T, header = T)
+mda = read.delim(paste0("data/", dataset_date, "_alleles.merged.tsv"), as.is = T, header = T)
+nd = read.delim(paste0("data/", dataset_date, "_nuclei.merged.tsv"), as.is = T, header = T)
 cs = read.delim("data/chr_size.txt", as.is = T, header = F)
 colnames(cs) = c("chr", "size")
 
@@ -204,6 +204,7 @@ md_col_type = list(
     "dataset" = "factor",
     "cell_type" = "factor",
     "label" = "factor",
+    "probe_label" = "factor",
     "chr" = "factor",
     "chr_size" = "real",
     "set" = "factor",
@@ -222,6 +223,7 @@ mda_col_type = list(
     "angle" = "real",
     "dataset" = "factor",
     "label" = "factor",
+    "probe_label" = "factor",
     "cell_type" = "factor",
     "chr" = "factor",
     "chr_size" = "real",
@@ -266,6 +268,7 @@ md_col_label = list(
     "dataset" = "Dataset ID",
     "cell_type" = "Cell type",
     "label" = "Probe set name",
+    "probe_label" = "Probe name",
     "chr" = "Chromosome",
     "chr_size" = "Chromosome length [bp]",
     "set" = "Probe set type",
@@ -284,6 +287,7 @@ mda_col_label = list(
     "angle" = "Angle with nucleus center of mass [deg]",
     "dataset" = "Dataset ID",
     "label" = "Probe set name",
+    "probe_label" = "Probe name",
     "cell_type" = "Cell type",
     "chr" = "Chromosome",
     "chr_size" = "Chromosome length [bp]",
@@ -326,6 +330,7 @@ md_col_descr = list(
     "dataset" = "Dataset ID.",
     "cell_type" = "Cell type.",
     "label" = "Probe set name.",
+    "probe_label" = "Probe name.",
     "chr" = "Chromosome.",
     "chr_size" = "Chromosome length in bp.",
     "set" = "Probe set type (c: central; s: start; e: end).",
@@ -344,6 +349,7 @@ mda_col_descr = list(
     "angle" = "Angle between two alleles in the same channel and the nucleus center of mass",
     "dataset" = "Dataset ID.",
     "label" = "Probe set name.",
+    "probe_label" = "Probe name.",
     "cell_type" = "Cell type.",
     "chr" = "Chromosome.",
     "chr_size" = "Chromosome length in bp.",
