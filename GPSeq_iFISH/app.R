@@ -139,19 +139,10 @@ label2col = function(label, set) {
     return(names(which(set == label))[1])
 }
 
-gen_dlin = function(data, path) {
-    # Take single-dot data and calculate inter-probe linear/3D distance
-    # Generate linear/spatial distance information for all probe couples in a cell, per allele
-    
-    # Remove missed dots
-    data = data[data$cellID != 0,]
-
-}
-
 # PREPARE DATA =====================================================================================
 
 # Read main data
-dataset_date = "2018-01-15"
+dataset_date = "2018-01-16"
 md = read.delim(paste0("data/", dataset_date, "_dots.merged.tsv"), as.is = T, header = T)
 mda = read.delim(paste0("data/", dataset_date, "_alleles.merged.tsv"), as.is = T, header = T)
 nd = read.delim(paste0("data/", dataset_date, "_nuclei.merged.tsv"), as.is = T, header = T)
@@ -381,12 +372,6 @@ sum_types = list(
     "Mean" = mean,
     "Median" = median
 )
-
-# Produce inter-probe distance table
-dlin_path = "data/linear_distance.tsv"
-if ( !file.exists(dlin_path) ) {
-    gen_dlin(md, dlin_path)
-}
 
 # BACK-END =========================================================================================
 
