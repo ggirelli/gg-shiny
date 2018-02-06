@@ -142,7 +142,7 @@ label2col = function(label, set) {
 # PREPARE DATA =====================================================================================
 
 # Read main data
-dataset_date = "2018-01-16"
+dataset_date = "2018-02-05"
 md = read.delim(paste0("data/", dataset_date, "_dots.merged.tsv"), as.is = T, header = T)
 mda = read.delim(paste0("data/", dataset_date, "_alleles.merged.tsv"), as.is = T, header = T)
 nd = read.delim(paste0("data/", dataset_date, "_nuclei.merged.tsv"), as.is = T, header = T)
@@ -487,7 +487,7 @@ server = function(input, output) {
         return(out)
     })
 
-    output$dots_barPlot = renderPlotly({
+    dataPrep_dots = function(input) {
         data = select_dot_data(input)
 
         # Identify axes
@@ -547,6 +547,17 @@ server = function(input, output) {
         }
 
         t$x = order_data(t$x, xax)
+
+        return(t)
+    }
+
+    output$dots_barPlot = renderPlotly({
+        t = dataPrep_dots(input)
+
+        # Identify axes
+        xax = label2col(input$dots_abs_xaxis, md_col_label)
+        yax = input$dots_abs_yaxis
+
         p = ggplot(t, aes(x = x, y = y, fill = x))
         p = p + geom_bar(stat = "identity")
         p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
@@ -559,6 +570,10 @@ server = function(input, output) {
         }
 
         p
+    })
+
+    output$dots_barCount = renderPrint({
+        print(dataPrep_dots(input))
     })
 
     dataPrep_perChannel = function(input) {
@@ -1230,6 +1245,10 @@ ui <- fluidPage(
                                 selected = "Channel"),
                             uiOutput("md_factor_descr_1")
                         )
+                    ),
+                    fluidRow(
+                        h2("Tabulated data"),
+                        verbatimTextOutput(outputId = "dots_barCount")
                     )
                 ),
                 tabPanel("Channels", br(),
