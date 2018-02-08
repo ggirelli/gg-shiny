@@ -526,6 +526,7 @@ server = function(input, output) {
         xax = label2col(input$specTab_by, md_col_label)
         yax = input$specTab_count
         if ( yax %in% md_col_label) { yax = label2col(yax, md_col_label) }
+        yax = paste(unlist(strsplit(yax, " ")), collapse = "_")
 
         colnames(data) = c(xax, yax)
 
