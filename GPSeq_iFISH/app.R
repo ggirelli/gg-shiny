@@ -142,7 +142,7 @@ label2col = function(label, set) {
 # PREPARE DATA =====================================================================================
 
 # Read main data
-dataset_date = "2018-02-05"
+dataset_date = "2018-02-08"
 md = read.delim(paste0("data/", dataset_date, "_dots.merged.tsv"), as.is = T, header = T)
 mda = read.delim(paste0("data/", dataset_date, "_alleles.merged.tsv"), as.is = T, header = T)
 nd = read.delim(paste0("data/", dataset_date, "_nuclei.merged.tsv"), as.is = T, header = T)
@@ -162,6 +162,10 @@ md$set = unlist(lapply(strsplit(md$label, '.', fixed = T), FUN = function(x) x[[
 mda$chr = unlist(lapply(strsplit(mda$label, '.', fixed = T), FUN = function(x) x[[1]]))
 mda$chr_size = cs$size[match(tolower(mda$chr), cs$chr)]
 mda$set = unlist(lapply(strsplit(mda$label, '.', fixed = T), FUN = function(x) x[[2]]))
+
+# Add unique cell identifier
+md$cell_label = paste(md$dataset, md$File, md$cell_ID, sep = "~")
+mda$cell_label = paste(mda$dataset, mda$File, mda$cell_ID, sep = "~")
 
 # Make channel lower-case
 md$Channel = tolower(md$Channel)
@@ -199,7 +203,8 @@ md_col_type = list(
     "chr" = "factor",
     "chr_size" = "real",
     "set" = "factor",
-    "probe_name" = "factor"
+    "probe_name" = "factor",
+    "cell_label" = "factor"
 )
 mda_col_type = list(
     "File" = "factor",
@@ -218,7 +223,8 @@ mda_col_type = list(
     "cell_type" = "factor",
     "chr" = "factor",
     "chr_size" = "real",
-    "set" = "factor"
+    "set" = "factor",
+    "cell_label" = "factor"
 )
 nd_col_type = list(
     "s" = "factor",
@@ -263,7 +269,8 @@ md_col_label = list(
     "chr" = "Chromosome",
     "chr_size" = "Chromosome length [bp]",
     "set" = "Probe set type",
-    "probe_name" = "Probe name"
+    "probe_name" = "Probe name",
+    "cell_label" = "Cross-dataset cell identifier"
 )
 mda_col_label = list(
     "File" = "Field",
@@ -282,7 +289,8 @@ mda_col_label = list(
     "cell_type" = "Cell type",
     "chr" = "Chromosome",
     "chr_size" = "Chromosome length [bp]",
-    "set" = "Probe set type"
+    "set" = "Probe set type",
+    "cell_label" = "Cross-dataset cell identifier"
 )
 nd_col_label = list(
     "s" = "Field",
@@ -325,7 +333,8 @@ md_col_descr = list(
     "chr" = "Chromosome.",
     "chr_size" = "Chromosome length in bp.",
     "set" = "Probe set type (c: central; s: start; e: end).",
-    "probe_name" = "Probe name (chr.type.channel)."
+    "probe_name" = "Probe name (chr.type.channel).",
+    "cell_label" = "Cell identifier (dataset-FoV-ID)."
 )
 mda_col_descr = list(
     "File" = "ID of the field of view.",
@@ -487,6 +496,85 @@ server = function(input, output) {
         return(out)
     })
 
+    dataPrep_spec_table = function(input) {
+        data = select_dot_data(input)
+
+        x = label2col(input$specTab_by, md_col_label)
+
+        b = by(data, data[, x], FUN = function(st) {
+            if ( ! input$specTab_count %in% md_col_label) {
+                if ( "Dots" == input$specTab_count ) {
+                    return(nrow(st))
+                } else if ( "Dots in cells" == input$specTab_count ) {
+                    return(nrow(st[st$cell_ID != 0,]))
+                } else if ( "Dots outside cells" == input$specTab_count ) {
+                    return(nrow(st[st$cell_ID == 0,]))
+                }
+            } else {
+                return(length(unique(st[, label2col(input$specTab_count, md_col_label)])))
+            }
+        })
+        out = data.frame(names(b), as.vector(b))
+        colnames(out) = c(input$specTab_by, paste0("#", input$specTab_count))
+
+        return(out)
+    }
+
+    dataPlot_spec_table = function(input) {
+        data = dataPrep_spec_table(input)
+
+        xax = label2col(input$specTab_by, md_col_label)
+        yax = input$specTab_count
+        if ( yax %in% md_col_label) { yax = label2col(yax, md_col_label) }
+
+        colnames(data) = c(xax, yax)
+
+        p = ggplot(data, aes_string(x = xax, y = yax, fill = xax))
+        p = p + geom_bar(stat = "identity")
+        p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+        p = p + geom_hline(yintercept = input$specTab_hline, linetype = "dashed")
+
+        p
+    }
+
+    output$spec_barplot = renderPlotly({
+        dataPlot_spec_table(input)
+    })
+
+    #output$spec_table = renderDataTable({ return(dataPrep_spec_table(input)) })
+
+    output$spec_table_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$specTab_by, md_col_label)
+            y = input$specTab_count
+            if ( input$specTab_count %in% md_col_label ) {
+                y = label2col(y, md_col_label)
+            }
+            paste0(x, ".by.", y, ".count_table.tsv")
+        },
+        content = function(file) {
+            write.table(dataPrep_spec_table(input), file,
+                row.names = F, quote = F, sep = "\t")
+        }
+    )
+
+    output$spec_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$specTab_by, md_col_label)
+            y = input$specTab_count
+            if ( input$specTab_count %in% md_col_label ) {
+                y = label2col(y, md_col_label)
+            }
+            paste0(x, ".by.", y, ".count_table.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_spec_table(input))
+            dev.off()
+        }
+    )
+
     dataPrep_dots = function(input) {
         data = select_dot_data(input)
 
@@ -551,7 +639,7 @@ server = function(input, output) {
         return(t)
     }
 
-    output$dots_barPlot = renderPlotly({
+    dataPlot_dots = function(input) {
         t = dataPrep_dots(input)
 
         # Identify axes
@@ -570,11 +658,33 @@ server = function(input, output) {
         }
 
         p
-    })
+    }
 
-    output$dots_barCount = renderPrint({
-        print(dataPrep_dots(input))
-    })
+    output$dots_barPlot = renderPlotly({ dataPlot_dots(input) })
+
+    output$dots_barplot_dl = downloadHandler(
+        filename = function() {
+            paste0(input$dots_abs_yaxis, ".by.",
+                label2col(input$dots_abs_xaxis, md_col_label), ".pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_dots(input))
+            dev.off()
+        }
+    )
+
+    output$dots_barplot_data_dl = downloadHandler(
+        filename = function() {
+            paste0(input$dots_abs_yaxis, ".by.",
+                label2col(input$dots_abs_xaxis, md_col_label), ".tsv")
+        },
+        content = function(file) {
+            data = dataPrep_dots(input)
+            colnames(data) = c(input$dots_abs_yaxis, label2col(input$dots_abs_xaxis, md_col_label))
+            write.table(data, file, row.names = F, quote = F, sep = "\t")
+        }
+    )
 
     dataPrep_perChannel = function(input) {
         data = select_dot_data(input)
@@ -626,7 +736,7 @@ server = function(input, output) {
         return(data)
     }
 
-    output$dots_perChannel = renderPlotly({
+    dataPlot_perChannel = function(input) {
         data = dataPrep_perChannel(input)
 
         m <- list(
@@ -653,7 +763,9 @@ server = function(input, output) {
                 zaxis = list(title = 'tmr')),
             autosize = T, margin = m)
         p
-    })
+    }
+
+    output$dots_perChannel = renderPlotly({ dataPlot_perChannel(input) })
 
     output$dots_perChannel_recap = renderPrint({
         data = dataPrep_perChannel(input)
@@ -667,7 +779,17 @@ server = function(input, output) {
             "have exactly 2 dots per channel.\n"))
     })
 
-    output$nuclei_distPlot = renderPlotly({
+    output$dots_perchannel_data_dl = downloadHandler(
+        filename = function() {
+            paste0("dots_per_channel.tsv")
+        },
+        content = function(file) {
+            data = dataPrep_perChannel(input)[[1]]
+            write.table(data, file, row.names = F, quote = F, sep = "\t")
+        }
+    )
+
+    dataPlot_nuclei_dist = function(input) {
         data = select_nuclei_data(input)
 
         # Identify axes
@@ -690,7 +812,20 @@ server = function(input, output) {
         }
 
         p
-    })
+    }
+
+    output$nuclei_distPlot = renderPlotly({ dataPlot_nuclei_dist(input) })
+
+    output$nd_distr_dl = downloadHandler(
+        filename = function() {
+            paste0(label2col(input$nuclei_dist_xaxis, nd_col_label), ".nuclei_distr.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_nuclei_dist(input))
+            dev.off()
+        }
+    )
 
     output$nuclei_table = renderDataTable({
         data = select_nuclei_data(input)
@@ -698,9 +833,21 @@ server = function(input, output) {
             "sumI", "meanI", "shape")])
     })
 
+    output$nuclei_table_dl = downloadHandler(
+        filename = function() {
+            paste0("nuclei.tsv")
+        },
+        content = function(file) {
+            data = select_nuclei_data(input)
+            data = data[, c("cell_type", "dataset", "s", "n", "G1", "flat_size", "size", "surf",
+                "sumI", "meanI", "shape")]
+            write.table(data, file, row.names = F, quote = F, sep = "\t")
+        }
+    )
+
     # Plot dots ------------------------------------------------------------------------------------
 
-    output$dots_distPlot = renderPlotly({
+    dataPlot_dots_dist = function(input) {
         data = select_dot_data(input)
 
         # Identify x axis
@@ -713,9 +860,22 @@ server = function(input, output) {
             p = p + geom_histogram(color = 1, fill = 'white', bins = input$dots_dist_nbins)
         }
         p = p + xlab(input$dots_dist_xaxis)
-    })
+    }
 
-    output$dots_boxPlot = renderPlotly({
+    output$dots_distPlot = renderPlotly({ dataPlot_dots_dist(input) })
+
+    output$dots_dist_dl = downloadHandler(
+        filename = function() {
+            paste0(label2col(input$dots_dist_xaxis, md_col_label), ".dots_distr.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_dots_dist(input))
+            dev.off()
+        }
+    )
+
+    dataPlot_dots_box = function(input) {
         data = select_dot_data(input)
 
         # Identify axes
@@ -729,9 +889,23 @@ server = function(input, output) {
         p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
         p
-    })
+    }
 
-    output$dots_sumPlot = renderPlotly({
+    output$dots_boxPlot = renderPlotly({ dataPlot_dots_box(input) })
+
+    output$dots_box_dl = downloadHandler(
+        filename = function() {
+            paste0(label2col(input$dots_box_xaxis, md_col_label), ".",
+                label2col(input$dots_box_yaxis, md_col_label), ".dots_box.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_dots_box(input))
+            dev.off()
+        }
+    )
+
+    dataPrep_dots_sum = function(input) {
         data = select_dot_data(input)
 
         # Identify axes
@@ -746,41 +920,11 @@ server = function(input, output) {
         # Remove missing x
         data = data[!is.na(data[, xax]),]
 
-        p = ggplot(data, aes_string(x = xax, y = yax, color = xax))
-        p = p + stat_summary(fun.y = stype, geom = "point")
-        p = p + xlab(input$dots_sum_xaxis)
-        p = p + ylab(paste0(input$dots_sum_type, " of ", input$dots_sum_yaxis))
-        p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+        return(data)
+    }
 
-        if ( input$dots_sum_lm ) {
-
-            if ( "factor" == md_col_type[[xax]] ) {
-                sdata = data.frame(
-                    x = levels(data[, xax]),
-                    y = as.numeric(by(data[, yax], data[, xax], FUN = stype, na.rm = T))
-                )
-                sdata = sdata[!is.na(sdata$y),]
-                regr = summary(lm(sdata$y ~ I(1:nrow(sdata))))$coefficients
-            } else {
-                sdata = do.call(rbind, by(data, data[, xax],
-                    FUN = function(subt) {
-                        data.frame(
-                            x = subt[1, xax],
-                            y = stype(subt[, yax], na.rm = T)
-                        )
-                    }
-                ))
-                sdata = sdata[!is.na(sdata$y),]
-                regr = summary(lm(sdata$y ~ sdata$x))$coefficients
-            }
-            p = p + geom_abline(intercept = regr[1], slope = regr[2], linetype = 2)
-        }
-
-        p
-    })
-
-    output$dots_summary_lm = renderPrint({
-        data = select_dot_data(input)
+    dataRegr_dots_sum = function(input) {
+        data = dataPrep_dots_sum(input)
 
         # Identify axes
         xax = label2col(input$dots_sum_xaxis, md_col_label)
@@ -790,9 +934,6 @@ server = function(input, output) {
         }
         yax = label2col(input$dots_sum_yaxis, md_col_label)
         stype = sum_types[[input$dots_sum_type]]
-
-        # Remove missing x
-        data = data[!is.na(data[, xax]),]
 
         if ( "factor" == md_col_type[[xax]] ) {
             sdata = data.frame(
@@ -814,10 +955,56 @@ server = function(input, output) {
             regr = summary(lm(sdata$y ~ sdata$x))
         }
 
-        return(regr)
-    })
+        return(list(regr, sdata))
+    }
 
-    output$dots_scatterPlot = renderPlotly({
+    dataPlot_dots_sum = function(input) {
+        data = dataPrep_dots_sum(input)
+
+        # Identify axes
+        xax = label2col(input$dots_sum_xaxis, md_col_label)
+        if ( "factor" == md_col_type[[xax]] ) {
+            data[, xax] = factor(data[, xax])
+            data[, xax] = order_data(data[, xax], xax)
+        }
+        yax = label2col(input$dots_sum_yaxis, md_col_label)
+        stype = sum_types[[input$dots_sum_type]]
+
+        p = ggplot(data, aes_string(x = xax, y = yax, color = xax))
+        p = p + stat_summary(fun.y = stype, geom = "point")
+        p = p + xlab(input$dots_sum_xaxis)
+        p = p + ylab(paste0(input$dots_sum_type, " of ", input$dots_sum_yaxis))
+        p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+        if ( input$dots_sum_lm ) {
+            l = dataRegr_dots_sum(input)
+            regr = l[[1]]$coefficients
+            sdata = l[[2]]
+            p = p + geom_abline(intercept = regr[1], slope = regr[2], linetype = 2)
+        }
+
+        p
+    }
+
+    output$dots_sumPlot = renderPlotly({ dataPlot_dots_sum(input) })
+
+    output$dots_summary_lm = renderPrint({ dataRegr_dots_sum(input)[[1]] })
+
+    output$dots_sum_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$dots_sum_xaxis, md_col_label)
+            y = label2col(input$dots_sum_yaxis, md_col_label)
+            s = input$dots_sum_type
+            paste0(x, ".", y, ".", s, ".dots_sum.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_dots_sum(input))
+            dev.off()
+        }
+    )
+
+    dataPlot_dots_scatter = function(input) {
         data = select_dot_data(input)
 
         # Identify axes
@@ -836,7 +1023,23 @@ server = function(input, output) {
         }
 
         p
-    })
+    }
+
+    output$dots_scatterPlot = renderPlotly({ dataPlot_dots_scatter(input) })
+
+    output$dots_scat_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$dots_scat_xaxis, md_col_label)
+            y = label2col(input$dots_scat_yaxis, md_col_label)
+            c = label2col(input$dots_scat_color, md_col_label)
+            paste0(x, ".", y, ".", c, ".dots_scatter.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_dots_scatter(input))
+            dev.off()
+        }
+    )
 
     output$dots_scatter_lm = renderPrint({
         data = select_dot_data(input)
@@ -849,7 +1052,7 @@ server = function(input, output) {
         return(regr)
     })
 
-    output$dots_hexPlot = renderPlotly({
+    dataPlot_dots_hex = function(input) {
         data = select_dot_data(input)
 
         # Identify axes
@@ -858,7 +1061,24 @@ server = function(input, output) {
 
         p = ggplot(data, aes_string(x = xax, y = yax, color = xax)) + geom_hex()
         p = p + xlab(input$dots_hex_xaxis) + ylab(input$dots_hex_yaxis)
-    })
+
+        p
+    }
+
+    output$dots_hexPlot = renderPlotly({ dataPlot_dots_hex(input) })
+
+    output$dots_hex_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$dots_hex_xaxis, md_col_label)
+            y = label2col(input$dots_hex_yaxis, md_col_label)
+            paste0(x, ".", y, ".dots_hexplot.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_dots_hex(input))
+            dev.off()
+        }
+    )
 
     output$single_dot_table = renderDataTable({
         data = select_dot_data(input)
@@ -867,9 +1087,22 @@ server = function(input, output) {
             "Allele")])
     })
 
+    output$single_dot_table_dl = downloadHandler(
+        filename = function() {
+            paste0("dots.tsv")
+        },
+        content = function(file) {
+            data = select_dot_data(input)
+            data = data[, c("cell_type", "dataset", "File", "label", "chr", "set", "Channel",
+                "cell_ID", "G1", "x", "y", "z", "lamin_dist", "lamin_dist_norm", "centr_dist",
+                "centr_dist_norm", "Allele")]
+            write.table(data, file, row.names = F, quote = F, sep = "\t")
+        }
+    )
+
     # Plot allele ----------------------------------------------------------------------------------
 
-    output$allele_distPlot = renderPlotly({
+    dataPlot_allele_dist = function(input) {
         data = select_allele_data(input)
 
         # Identify x axis
@@ -884,9 +1117,23 @@ server = function(input, output) {
         p = p + xlab(input$allele_dist_xaxis)
 
         p
-    })
+    }
 
-    output$allele_boxPlot = renderPlotly({
+    output$allele_distPlot = renderPlotly({ dataPlot_allele_dist(input) })
+
+    output$allele_dist_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$allele_dist_xaxis, mda_col_label)
+            paste0(x, ".allele_dist.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_allele_dist(input))
+            dev.off()
+        }
+    )
+
+    dataPlot_allele_box = function(input) {
         data = select_allele_data(input)
 
         # Identify axes
@@ -900,9 +1147,24 @@ server = function(input, output) {
         p = p + xlab(input$allele_box_xaxis) + ylab(input$allele_box_yaxis)
 
         p
-    })
+    }
 
-    output$allele_sumPlot = renderPlotly({
+    output$allele_boxPlot = renderPlotly({ dataPlot_allele_box(input) })
+
+    output$allele_box_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$allele_box_xaxis, mda_col_label)
+            y = label2col(input$allele_box_yaxis, mda_col_label)
+            paste0(x,".", y, ".allele_box.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_allele_box(input))
+            dev.off()
+        }
+    )
+
+    dataPrep_allele_sum = function(input) {
         data = select_allele_data(input)
 
         # Identify axes
@@ -916,41 +1178,10 @@ server = function(input, output) {
 
         # Remove missing x
         data = data[!is.na(data[, xax]),]
+    }
 
-        p = ggplot(data, aes_string(x = xax, y = yax, color = xax))
-        p = p + stat_summary(fun.y = stype, geom = "point")
-        p = p + xlab(input$allele_box_xaxis)
-        p = p + ylab(paste0(input$allele_sum_type, " of ", input$allele_box_yaxis))
-        p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-        if ( input$allele_sum_lm ) {
-            if ( "factor" == mda_col_type[[xax]] ) {
-                sdata = data.frame(
-                    x = levels(data[, xax]),
-                    y = as.numeric(by(data[, yax], data[, xax], FUN = stype, na.rm = T))
-                )
-                sdata = sdata[!is.na(sdata$y),]
-                regr = summary(lm(sdata$y ~ I(1:nrow(sdata))))$coefficients
-            } else {
-                sdata = do.call(rbind, by(data, data[, xax],
-                    FUN = function(subt) {
-                        data.frame(
-                            x = subt[1, xax],
-                            y = stype(subt[, yax], na.rm = T)
-                        )
-                    }
-                ))
-                sdata = sdata[!is.na(sdata$y),]
-                regr = summary(lm(sdata$y ~ sdata$x))$coefficients
-            }
-            p = p + geom_abline(intercept = regr[1], slope = regr[2], linetype = 2)
-        }
-
-        p
-    })
-
-    output$allele_summary_lm = renderPrint({
-        data = select_allele_data(input)
+    dataLm_allele_sum = function(input) {
+        data = dataPrep_allele_sum(input)
 
         # Identify axes
         xax = label2col(input$allele_sum_xaxis, mda_col_label)
@@ -960,9 +1191,6 @@ server = function(input, output) {
         }
         yax = label2col(input$allele_sum_yaxis, mda_col_label)
         stype = sum_types[[input$allele_sum_type]]
-
-        # Remove missing x
-        data = data[!is.na(data[, xax]),]
 
         if ( "factor" == mda_col_type[[xax]] ) {
             sdata = data.frame(
@@ -984,10 +1212,55 @@ server = function(input, output) {
             regr = summary(lm(sdata$y ~ sdata$x))
         }
 
-        return(regr)
-    })
+        return(list(regr, sdata))
+    }
 
-    output$allele_scatterPlot = renderPlotly({
+    dataPlot_allele_sum = function(input) {
+        data = dataPrep_allele_sum(input)
+
+        # Identify axes
+        xax = label2col(input$allele_sum_xaxis, mda_col_label)
+        if ( "factor" == mda_col_type[[xax]] ) {
+            data[, xax] = factor(data[, xax])
+            data[, xax] = order_data(data[, xax], xax)
+        }
+        yax = label2col(input$allele_sum_yaxis, mda_col_label)
+        stype = sum_types[[input$allele_sum_type]]
+
+        p = ggplot(data, aes_string(x = xax, y = yax, color = xax))
+        p = p + stat_summary(fun.y = stype, geom = "point")
+        p = p + xlab(input$allele_box_xaxis)
+        p = p + ylab(paste0(input$allele_sum_type, " of ", input$allele_box_yaxis))
+        p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+        if ( input$allele_sum_lm ) {
+            l = dataLm_allele_sum(input)
+            regr = l[[1]]$coefficients
+            sdata = l[[2]]
+            p = p + geom_abline(intercept = regr[1], slope = regr[2], linetype = 2)
+        }
+
+        p
+    }
+
+    output$allele_sumPlot = renderPlotly({ dataPlot_allele_sum(input) })
+
+    output$allele_summary_lm = renderPrint({ dataLm_allele_sum(input)[[1]] })
+
+    output$allele_sum_dl = downloadHandler(
+        filename = function() {
+        x = label2col(input$allele_sum_xaxis, mda_col_label)
+        y = label2col(input$allele_sum_yaxis, mda_col_label)
+            paste0(x,".", y, ".allele_sum.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_allele_sum(input))
+            dev.off()
+        }
+    )
+
+    dataPlot_allele_scatter = function(input) {
         data = select_allele_data(input)
 
         # Identify axes
@@ -1006,7 +1279,22 @@ server = function(input, output) {
         }
 
         p
-    })
+    }
+
+    output$allele_scatterPlot = renderPlotly({ dataPlot_allele_scatter(input) })
+
+    output$allele_scat_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$allele_scat_xaxis, mda_col_label)
+            y = label2col(input$allele_scat_yaxis, mda_col_label)
+            paste0(x,".", y, ".allele_scatter.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_allele_scatter(input))
+            dev.off()
+        }
+    )
 
     output$allele_scatter_lm = renderPrint({
         data = select_allele_data(input)
@@ -1019,7 +1307,7 @@ server = function(input, output) {
         return(regr)
     })
 
-    output$allele_hexPlot = renderPlotly({
+    dataPlot_allele_hex = function(input) {
         data = select_allele_data(input)
 
         # Identify axes
@@ -1030,16 +1318,44 @@ server = function(input, output) {
         p = p + xlab(input$allele_hex_xaxis) + ylab(input$allele_hex_yaxis)
 
         p
-    })
+    }
+
+    output$allele_hexPlot = renderPlotly({ dataPlot_allele_hex(input) })
+
+    output$allele_hex_dl = downloadHandler(
+        filename = function() {
+        x = label2col(input$allele_hex_xaxis, mda_col_label)
+        y = label2col(input$allele_hex_yaxis, mda_col_label)
+            paste0(x,".", y, ".allele_hex.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_allele_hex(input))
+            dev.off()
+        }
+    )
 
     output$allele_table = renderDataTable({
-        return(mda[, c("cell_type", "dataset", "File", "label", "chr", "set", "Channel", "cell_ID",
+        data = select_allele_data(input)
+        return(data[, c("cell_type", "dataset", "File", "label", "chr", "set", "Channel", "cell_ID",
             "G1", "d_3d", "d_lamin", "d_lamin_norm", "d_centr", "d_centr_norm", "angle")])
     })
 
+    output$allele_table_dl = downloadHandler(
+        filename = function() {
+            paste0("allele.tsv")
+        },
+        content = function(file) {
+            data = select_allele_data(input)
+            data[, c("cell_type", "dataset", "File", "label", "chr", "set", "Channel", "cell_ID",
+                "G1", "d_3d", "d_lamin", "d_lamin_norm", "d_centr", "d_centr_norm", "angle")]
+            write.table(data, file, row.names = F, quote = F, sep = "\t")
+        }
+    )
+
     # Rankings -------------------------------------------------------------------------------------
 
-    output$rankPlot = renderPlotly({
+    dataPrep_rank = function(input) {
         data = select_dot_data(input)
 
         # Identify x axis
@@ -1058,41 +1374,52 @@ server = function(input, output) {
         ))
         sdata$x = factor(sdata$x, levels = sdata$x[order(sdata$y)])
 
-        p = ggplot(sdata, aes(x, y, fill = x))
+        return(sdata)
+    }
+
+    dataPlot_rank = function(input) {
+        data = dataPrep_rank(input)
+
+        p = ggplot(data, aes(x, y, fill = x))
         p = p + geom_bar(stat = "identity")
         p = p + xlab(input$rank_xaxis) + ylab(paste0(input$rank_stype, " of ", input$rank_yaxis))
         p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-        p
-    })
+        return(p)
+    }
 
-    output$rank_table = renderPrint({
-       data = select_dot_data(input)
+    output$rankPlot = renderPlotly({ dataPlot_rank(input) })
 
-        # Identify x axis
-        xax = label2col(input$rank_xaxis, md_col_label)
-        data[, xax] = factor(data[, xax])
-        data[, xax] = order_data(data[, xax], xax)
-        yax = label2col(input$rank_yaxis, md_col_label)
+    output$rank_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$rank_xaxis, md_col_label)
+            y = label2col(input$rank_yaxis, md_col_label)
+            paste0(x, ".", y, ".rank.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_rank(input))
+            dev.off()
+        }
+    )
 
-        sdata = do.call(rbind, by(data, data[, xax],
-            FUN = function(subt) {
-                data.frame(
-                    x = subt[1, xax],
-                    y = sum_types[[input$rank_stype]](subt[, yax], na.rm = T)
-                )
-            }
-        ))
-        sdata$x = factor(sdata$x, levels = sdata$x[order(sdata$y)])
-        rownames(sdata) = NULL
-        colnames(sdata) = c("chr", input$rank_stype)
-
-        return(sdata[order(sdata[,2]),])
-    })
+    output$rank_data_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$rank_xaxis, md_col_label)
+            y = label2col(input$rank_yaxis, md_col_label)
+            t = input$rank_stype
+            paste0(x, ".", y, ".", t, ".rank.tsv")
+        },
+        content = function(file) {
+            data = dataPrep_rank(input)
+            colnames(data) = c(input$rank_xaxis, paste0(input$rank_stype, " of ", input$rank_yaxis))
+            write.table(data, file, row.names = F, quote = F, sep = "\t")
+        }
+    )
 
     # E/C dot sets plots ---------------------------------------------------------------------------
     
-    output$ecset_distPlot = renderPlotly({
+    dataPlot_ecset_dist = function(input) {
         data = select_allele_data(input)
 
         # Identify x axis
@@ -1103,7 +1430,21 @@ server = function(input, output) {
         p = p + xlab(input$ecset_dist_xaxis)
 
         p
-    })
+    }
+
+    output$ecset_distPlot = renderPlotly({ dataPlot_ecset_dist(input) })
+
+    output$ecset_dl = downloadHandler(
+        filename = function() {
+            x = label2col(input$ecset_dist_xaxis, mda_col_label)
+            paste0(x, ".ecset.pdf")
+        },
+        content = function(file) {
+            pdf(file, height = 8, width = 16)
+            print(dataPlot_ecset_dist(input))
+            dev.off()
+        }
+    )
 
 }
 
@@ -1186,7 +1527,6 @@ ui <- fluidPage(
                         fields to select different variables as X/Y axes, grouping etc..."),
 
                     p("More information are available in each sub-tab and in the help page.")
-
                 ),
                 tabPanel("Help",
                     br(),
@@ -1200,6 +1540,7 @@ ui <- fluidPage(
                         tags$li(tags$s("Add option for linear model fitting to scatter plots.")),
                         tags$li(tags$s("Add option to plot the variability of
                             a continuous variable against a categorical one.")),
+                        tags$li(tags$s("Make plot and plotted data downloadable.")),
                         tags$li("Add plots to specific tab.")
                     )
                 )
@@ -1211,14 +1552,54 @@ ui <- fluidPage(
             br(),
 
             tabsetPanel(
-                tabPanel("Specs",
-                    br(), uiOutput(outputId = "dataset_specs")
+                tabPanel("Specs", br(),
+                    fluidRow(
+                        uiOutput(outputId = "dataset_specs")
+                    ),
+                    fluidRow(
+                        h3("Counting table"),
+                        p("Here you can generate tables with counts",
+                            " of all the selected datasets."), br(),
+                        fluidRow(
+                            column(3,
+                                selectInput("specTab_count", label = "Count",
+                                    choices = c("Dots", "Dots in cells", "Dots outside cells",
+                                        lapply(colnames(md)[which(md_col_type == "factor")],
+                                        FUN = function(x) { md_col_label[[x]] })),
+                                    selected = "Dots")
+                            ),
+                            column(3,
+                                selectInput("specTab_by", label = "By",
+                                    choices = c(lapply(colnames(md)[which(md_col_type == "factor")],
+                                        FUN = function(x) { md_col_label[[x]] })),
+                                    selected = "Channel")
+                            ),
+                            column(3,
+                                numericInput("specTab_hline", label = "Threshold", 200,
+                                    min = 1, max = 10000)
+                            ),
+                            column(3,
+                                downloadButton("spec_dl", "Download plot"),
+                                downloadButton("spec_table_dl", "Download data")
+                            )
+                        ),
+                        br(), plotlyOutput("spec_barplot")
+                    )
                 ),
-                tabPanel("Dots",
+                tabPanel("Dots", br(),
+                    fluidRow(
+                        
+                    ),
                     plotlyOutput(outputId = "dots_barPlot"), br(),
-                    fluidRow(column(6,
-                        checkboxInput("dots_relative", "show percentage of dots.", FALSE)
-                    )),
+                    fluidRow(
+                        column(6,
+                            checkboxInput("dots_relative", "show percentage of dots.", FALSE)
+                        ),
+                        column(6,
+                            downloadButton("dots_barplot_dl", "Download plot"),
+                            downloadButton("dots_barplot_data_dl", "Download data")
+                        )
+                    ),
                     fluidRow(
                         column(6,
                             selectInput("dots_abs_yaxis", label = "Y-axis",
@@ -1245,10 +1626,6 @@ ui <- fluidPage(
                                 selected = "Channel"),
                             uiOutput("md_factor_descr_1")
                         )
-                    ),
-                    fluidRow(
-                        h2("Tabulated data"),
-                        verbatimTextOutput(outputId = "dots_barCount")
                     )
                 ),
                 tabPanel("Channels", br(),
@@ -1257,7 +1634,14 @@ ui <- fluidPage(
                     p("As the script needs to navigate through each single cell, the plot might ",
                         "take some time (up to one minute) to reload."),
                     plotlyOutput(outputId = "dots_perChannel", height = 800), br(),
-                    verbatimTextOutput(outputId = "dots_perChannel_recap")
+                    fluidRow(
+                        column(6,
+                            verbatimTextOutput(outputId = "dots_perChannel_recap")
+                        ),
+                        column(6,
+                            downloadButton("dots_perchannel_data_dl", "Download data")
+                        )
+                    )
                 ),
                 tabPanel("Nuclei distribution", br(),
                     h4(strong("NOTE:"), "cell sub-population filters do not apply to this plot.",
@@ -1265,6 +1649,7 @@ ui <- fluidPage(
                     plotlyOutput(outputId = "nuclei_distPlot"), br(),
                     fluidRow(
                         column(6,
+                            downloadButton("nd_distr_dl", "Download plot"),
                             checkboxInput("nd_distr_line", "replace histogram with density.", FALSE)
                         ),
                         column(6,
@@ -1283,6 +1668,7 @@ ui <- fluidPage(
                     )
                 ),
                 tabPanel("Raw table", br(),
+                    p(downloadButton("nuclei_table_dl", "Download data")),
                     dataTableOutput(outputId = "nuclei_table")
                 )
             )
@@ -1297,6 +1683,7 @@ ui <- fluidPage(
                     plotlyOutput(outputId = "dots_distPlot"), br(),
                     fluidRow(
                         column(6,
+                            downloadButton("dots_dist_dl", "Download plot"),
                             checkboxInput("dots_dist_line",
                                 "replace histogram with density.", FALSE)
                         ),
@@ -1315,7 +1702,8 @@ ui <- fluidPage(
                         )
                     )
                 ),
-                tabPanel("Boxplot",
+                tabPanel("Boxplot", br(),
+                    p(downloadButton("dots_box_dl", "Download plot")),
                     plotlyOutput(outputId = "dots_boxPlot"), br(),
                     fluidRow(
                         column(6,
@@ -1337,11 +1725,14 @@ ui <- fluidPage(
                 tabPanel("Summary",
                     plotlyOutput(outputId = "dots_sumPlot"), br(),
                     fluidRow(
-                        column(12,
+                        column(6,
                             checkboxInput("dots_sum_lm", "perform linear regression.", FALSE),
                             conditionalPanel("input.dots_sum_lm",
                                 verbatimTextOutput("dots_summary_lm")
                             )
+                        ),
+                        column(6,
+                            downloadButton("dots_sum_dl", "Download plot")
                         )
                     ),
                     fluidRow(
@@ -1368,11 +1759,14 @@ ui <- fluidPage(
                 tabPanel("Scatter",
                     plotlyOutput(outputId = "dots_scatterPlot"), br(),
                     fluidRow(
-                        column(12,
+                        column(6,
                             checkboxInput("dots_scat_lm", "perform linear regression.", FALSE),
                             conditionalPanel("input.dots_scat_lm",
                                 verbatimTextOutput("dots_scatter_lm")
                             )
+                        ),
+                        column(6,
+                            downloadButton("dots_scat_dl", "Download plot")
                         )
                     ),
                     fluidRow(
@@ -1396,7 +1790,8 @@ ui <- fluidPage(
                         )
                     )
                 ),
-                tabPanel("Hexplot",
+                tabPanel("Hexplot", br(),
+                    p(downloadButton("dots_hex_dl", "Download plot")),
                     plotlyOutput(outputId = "dots_hexPlot"), br(),
                     fluidRow(
                         column(6,
@@ -1416,6 +1811,7 @@ ui <- fluidPage(
                     )
                 ),
                 tabPanel("Raw table", br(),
+                    p(downloadButton("single_dot_table_dl", "Download data")),
                     dataTableOutput(outputId = "single_dot_table")
                 )
             )
@@ -1432,6 +1828,7 @@ ui <- fluidPage(
                         plotlyOutput(outputId = "allele_distPlot"), br(),
                         fluidRow(
                             column(6,
+                                downloadButton("allele_dist_dl", "Download plot"),
                                 checkboxInput("allele_dist_line",
                                     "replace histogram with density.", FALSE)
                             ),
@@ -1450,7 +1847,8 @@ ui <- fluidPage(
                             )
                         )
                     ),
-                    tabPanel("Boxplot",
+                    tabPanel("Boxplot", br(),
+                        p(downloadButton("allele_box_dl", "Download plot")),
                         plotlyOutput(outputId = "allele_boxPlot"), br(),
                         fluidRow(
                             column(6,
@@ -1472,11 +1870,14 @@ ui <- fluidPage(
                     tabPanel("Summary",
                         plotlyOutput(outputId = "allele_sumPlot"), br(),
                         fluidRow(
-                            column(12,
+                            column(6,
                                 checkboxInput("allele_sum_lm", "perform linear regression.", FALSE),
                                 conditionalPanel("input.allele_sum_lm",
                                     verbatimTextOutput("allele_summary_lm")
                                 )
+                            ),
+                            column(6,
+                                downloadButton("allele_sum_dl", "Download plot")
                             )
                         ),
                         fluidRow(
@@ -1503,12 +1904,15 @@ ui <- fluidPage(
                     tabPanel("Scatter",
                         plotlyOutput(outputId = "allele_scatterPlot"), br(),
                         fluidRow(
-                            column(12,
+                            column(6,
                                 checkboxInput("allele_scat_lm",
                                     "perform linear regression.", FALSE),
                                 conditionalPanel("input.allele_scat_lm",
                                     verbatimTextOutput("allele_scatter_lm")
                                 )
+                            ),
+                            column(6,
+                                downloadButton("allele_scat_dl", "Download plot")
                             )
                         ),
                         fluidRow(
@@ -1534,6 +1938,7 @@ ui <- fluidPage(
                     ),
                     tabPanel("Hexplot",
                         plotlyOutput(outputId = "allele_hexPlot"), br(),
+                        p(downloadButton("allele_hex_dl", "Download plot")),
                         fluidRow(
                             column(6,
                                 selectInput("allele_hex_xaxis", label = "X-axis",
@@ -1552,6 +1957,7 @@ ui <- fluidPage(
                         )
                     ),
                     tabPanel("Raw table", br(),
+                        p(downloadButton("allele_table_dl", "Download table")),
                         dataTableOutput(outputId = "allele_table")
                     )
                 )
@@ -1576,12 +1982,10 @@ ui <- fluidPage(
                     br(),
                     p("Here to plot chromosome rankings based on centrality."),
                     plotlyOutput(outputId = "rankPlot"), br(),
-                    conditionalPanel("input.rank_table",
-                        verbatimTextOutput("rank_table")
-                    ),
                     fluidRow(
                         column(6,
-                            checkboxInput("rank_table", "show rank table.", FALSE)
+                            downloadButton("rank_dl", "Download plot"),
+                            downloadButton("rank_data_dl", "Download data")
                         ),
                         column(6,
                             selectInput("rank_stype", label = "Summary measure",
@@ -1629,6 +2033,9 @@ ui <- fluidPage(
                                             FUN = function(x) { mda_col_label[[x]] }),
                                             selected = "Absolute 3D distance [nm]"),
                                         uiOutput("mda_real_descr_9")
+                                    ),
+                                    column(6, br(),
+                                        downloadButton("ecset_dl", "Download plot")
                                     )
                                 )
                             )
