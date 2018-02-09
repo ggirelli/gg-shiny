@@ -18,7 +18,7 @@ library(ggplot2)
 
 # FUNCTIONS ========================================================================================
 
-order_allele_labels = function(data) {
+order_copy_labels = function(data) {
     data = factor(data, levels = c("Extra", "Single", "Central", "Peripheral"))
     return(data)
 }
@@ -32,7 +32,7 @@ order_chromosomes = function(data) {
 }
 
 order_data = function(data, flag) {
-    if ( flag == "Allele" ) { return(order_allele_labels(data)) }
+    if ( flag == "Allele" ) { return(order_copy_labels(data)) }
     if ( flag == "chr" ) { return(order_chromosomes(data)) }
     return(data)
 }
@@ -55,8 +55,8 @@ filter_dataset = function(data, input) {
 filter_cell_phase = function(data, input, flag) {
     # Filters data based on cell cycle phase and input$cell_phase selection.
     # For G1: based on G1 column.
-    # For 1 allele:
-    # For 2 alleles:
+    # For 1 copy:
+    # For 2 copies:
 
     data$uniID = paste0(
         data$dataset, "~",
@@ -64,11 +64,11 @@ filter_cell_phase = function(data, input, flag) {
         data$cell_ID
     )
 
-    # Select 1-allele cells
-    if( "Only cells with 1 allele" == input$cell_phase ) {
-        if( "alleles" == flag ) return()
+    # Select 1-copy cells
+    if( "Only cells with 1 copy" == input$cell_phase ) {
+        if( "copies" == flag ) return()
         if( "nuclei" != flag ) {
-            fpath = paste0("data/dots.only1allele.tsv")
+            fpath = paste0("data/dots.only1copy.tsv")
             if ( !file.exists(fpath) ) {
                 data = data[0 != data$cell_ID,]
                 data = do.call(rbind, by(data, data$uniID,
@@ -84,10 +84,10 @@ filter_cell_phase = function(data, input, flag) {
         }
     }
 
-    # Select 2-alleles cells
-    fpath = paste0("data/dots.only2allele.tsv")
-        if( ! flag %in% c("alleles", "nuclei") ) {
-            if( "Only cells with 2 alleles" == input$cell_phase ) {
+    # Select 2-copies cells
+    fpath = paste0("data/dots.only2copy.tsv")
+        if( ! flag %in% c("copies", "nuclei") ) {
+            if( "Only cells with 2 copies" == input$cell_phase ) {
             if ( !file.exists(fpath) ) {
                 data = data[0 != data$cell_ID,]
                 data = do.call(rbind, by(data, data$uniID,
@@ -119,16 +119,16 @@ select_dot_data = function(input) {
     return(data)
 }
 
-select_allele_data = function(input) {
-    # Applies G1 and dataset selection to allele data.
-    data = filter_cell_phase(mda, input, "alleles")
+select_copy_data = function(input) {
+    # Applies G1 and dataset selection to copy data.
+    data = filter_cell_phase(mda, input, "copies")
     data = filter_cell_type(data, input)
     data = filter_dataset(data, input)
     return(data)
 }
 
 select_nuclei_data = function(input) {
-    # Applies dataset selection to allele data.
+    # Applies dataset selection to copy data.
     data = filter_cell_phase(nd, input, "nuclei")
     data = filter_cell_type(data, input)
     data = filter_dataset(data, input)
@@ -149,7 +149,7 @@ nd = read.delim(paste0("data/", dataset_date, "_nuclei.merged.tsv"), as.is = T, 
 cs = read.delim("data/chr_size.txt", as.is = T, header = F)
 colnames(cs) = c("chr", "size")
 
-# Convert allele labels to readable ones
+# Convert copy labels to readable ones
 md$Allele[md$Allele == -1] = "Extra"
 md$Allele[md$Allele == 0] = "Single"
 md$Allele[md$Allele == 1] = "Central"
@@ -322,10 +322,10 @@ md_col_descr = list(
     "centr_dist_norm" = "Relative distance from nucleus central region [a.u.].",
     "G1" = "1 for G1 cells, 0 for non-G1 cells.",
     "Allele" = "Allele labeling by gpseq-img-py.
-    Extra: more than 2 alleles in that cell.
-    Single: only one allele in that cell.
-    Central: central allele, from a cell with 2 alleles.
-    Peripheral: peripheral allele, from a cell with 2 alleles.",
+    Extra: more than 2 copies in that cell.
+    Single: only one copy in that cell.
+    Central: central copy, from a cell with 2 copies.
+    Peripheral: peripheral copy, from a cell with 2 copies.",
     "dataset" = "Dataset ID.",
     "cell_type" = "Cell type.",
     "label" = "Probe set name.",
@@ -341,12 +341,12 @@ mda_col_descr = list(
     "Channel" = "Label of a channel.",
     "cell_ID" = "Nucleus ID assigned by gpseq-img-py.",
     "G1" = "1 for G1 cells, 0 for non-G1 cells.",
-    "d_3d" = "3D distance between two alleles in the same channel.",
-    "d_lamin" = "Distance between absolute lamin layers of two alleles in the same channel.",
-    "d_lamin_norm" = "Distance between relative lamin layers of two alleles in the same channel.",
-    "d_centr" = "Distance between absolute center layers of two alleles in the same channel.",
-    "d_centr_norm" = "Distance between relative center layers of two alleles in the same channel.",
-    "angle" = "Angle between two alleles in the same channel and the nucleus center of mass",
+    "d_3d" = "3D distance between two copies in the same channel.",
+    "d_lamin" = "Distance between absolute lamin layers of two copies in the same channel.",
+    "d_lamin_norm" = "Distance between relative lamin layers of two copies in the same channel.",
+    "d_centr" = "Distance between absolute center layers of two copies in the same channel.",
+    "d_centr_norm" = "Distance between relative center layers of two copies in the same channel.",
+    "angle" = "Angle between two copies in the same channel and the nucleus center of mass",
     "dataset" = "Dataset ID.",
     "label" = "Probe set name.",
     "probe_label" = "Probe name.",
@@ -490,7 +490,7 @@ server = function(input, output) {
             length(which(data$cell_ID != 0))))
         out = list(out, p(strong("Number of dots outside cells"), ":",
             length(which(data$cell_ID == 0))))
-        out = list(out, p(strong("Number of allele couples"), ":",
+        out = list(out, p(strong("Number of copy couples"), ":",
             length(which(data$Allele == "Central"))))
 
         return(out)
@@ -1101,97 +1101,97 @@ server = function(input, output) {
         }
     )
 
-    # Plot allele ----------------------------------------------------------------------------------
+    # Plot copy ----------------------------------------------------------------------------------
 
-    dataPlot_allele_dist = function(input) {
-        data = select_allele_data(input)
+    dataPlot_copy_dist = function(input) {
+        data = select_copy_data(input)
 
         # Identify x axis
-        xax = label2col(input$allele_dist_xaxis, mda_col_label)
+        xax = label2col(input$copy_dist_xaxis, mda_col_label)
 
         p = ggplot(data, aes_string(x = xax))
-        if( input$allele_dist_line ) {
+        if( input$copy_dist_line ) {
             p = p + geom_density(color = 1, fill = 'white')
         } else {
-            p = p + geom_histogram(color = 1, fill = 'white', bins = input$allele_dist_nbins)
+            p = p + geom_histogram(color = 1, fill = 'white', bins = input$copy_dist_nbins)
         }
-        p = p + xlab(input$allele_dist_xaxis)
+        p = p + xlab(input$copy_dist_xaxis)
 
         p
     }
 
-    output$allele_distPlot = renderPlotly({ dataPlot_allele_dist(input) })
+    output$copy_distPlot = renderPlotly({ dataPlot_copy_dist(input) })
 
-    output$allele_dist_dl = downloadHandler(
+    output$copy_dist_dl = downloadHandler(
         filename = function() {
-            x = label2col(input$allele_dist_xaxis, mda_col_label)
-            paste0(x, ".allele_dist.pdf")
+            x = label2col(input$copy_dist_xaxis, mda_col_label)
+            paste0(x, ".copy_dist.pdf")
         },
         content = function(file) {
             pdf(file, height = 8, width = 16)
-            print(dataPlot_allele_dist(input))
+            print(dataPlot_copy_dist(input))
             dev.off()
         }
     )
 
-    dataPlot_allele_box = function(input) {
-        data = select_allele_data(input)
+    dataPlot_copy_box = function(input) {
+        data = select_copy_data(input)
 
         # Identify axes
-        xax = label2col(input$allele_box_xaxis, mda_col_label)
+        xax = label2col(input$copy_box_xaxis, mda_col_label)
         data[, xax] = factor(data[, xax])
         data[, xax] = order_data(data[, xax], xax)
-        yax = label2col(input$allele_box_yaxis, mda_col_label)
+        yax = label2col(input$copy_box_yaxis, mda_col_label)
 
         p = ggplot(data, aes_string(x = xax, y = yax, color = xax)) + geom_boxplot()
         p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
-        p = p + xlab(input$allele_box_xaxis) + ylab(input$allele_box_yaxis)
+        p = p + xlab(input$copy_box_xaxis) + ylab(input$copy_box_yaxis)
 
         p
     }
 
-    output$allele_boxPlot = renderPlotly({ dataPlot_allele_box(input) })
+    output$copy_boxPlot = renderPlotly({ dataPlot_copy_box(input) })
 
-    output$allele_box_dl = downloadHandler(
+    output$copy_box_dl = downloadHandler(
         filename = function() {
-            x = label2col(input$allele_box_xaxis, mda_col_label)
-            y = label2col(input$allele_box_yaxis, mda_col_label)
-            paste0(x,".", y, ".allele_box.pdf")
+            x = label2col(input$copy_box_xaxis, mda_col_label)
+            y = label2col(input$copy_box_yaxis, mda_col_label)
+            paste0(x,".", y, ".copy_box.pdf")
         },
         content = function(file) {
             pdf(file, height = 8, width = 16)
-            print(dataPlot_allele_box(input))
+            print(dataPlot_copy_box(input))
             dev.off()
         }
     )
 
-    dataPrep_allele_sum = function(input) {
-        data = select_allele_data(input)
+    dataPrep_copy_sum = function(input) {
+        data = select_copy_data(input)
 
         # Identify axes
-        xax = label2col(input$allele_sum_xaxis, mda_col_label)
+        xax = label2col(input$copy_sum_xaxis, mda_col_label)
         if ( "factor" == mda_col_type[[xax]] ) {
             data[, xax] = factor(data[, xax])
             data[, xax] = order_data(data[, xax], xax)
         }
-        yax = label2col(input$allele_sum_yaxis, mda_col_label)
-        stype = sum_types[[input$allele_sum_type]]
+        yax = label2col(input$copy_sum_yaxis, mda_col_label)
+        stype = sum_types[[input$copy_sum_type]]
 
         # Remove missing x
         data = data[!is.na(data[, xax]),]
     }
 
-    dataLm_allele_sum = function(input) {
-        data = dataPrep_allele_sum(input)
+    dataLm_copy_sum = function(input) {
+        data = dataPrep_copy_sum(input)
 
         # Identify axes
-        xax = label2col(input$allele_sum_xaxis, mda_col_label)
+        xax = label2col(input$copy_sum_xaxis, mda_col_label)
         if ( "factor" == mda_col_type[[xax]] ) {
             data[, xax] = factor(data[, xax])
             data[, xax] = order_data(data[, xax], xax)
         }
-        yax = label2col(input$allele_sum_yaxis, mda_col_label)
-        stype = sum_types[[input$allele_sum_type]]
+        yax = label2col(input$copy_sum_yaxis, mda_col_label)
+        stype = sum_types[[input$copy_sum_type]]
 
         if ( "factor" == mda_col_type[[xax]] ) {
             sdata = data.frame(
@@ -1216,26 +1216,26 @@ server = function(input, output) {
         return(list(regr, sdata))
     }
 
-    dataPlot_allele_sum = function(input) {
-        data = dataPrep_allele_sum(input)
+    dataPlot_copy_sum = function(input) {
+        data = dataPrep_copy_sum(input)
 
         # Identify axes
-        xax = label2col(input$allele_sum_xaxis, mda_col_label)
+        xax = label2col(input$copy_sum_xaxis, mda_col_label)
         if ( "factor" == mda_col_type[[xax]] ) {
             data[, xax] = factor(data[, xax])
             data[, xax] = order_data(data[, xax], xax)
         }
-        yax = label2col(input$allele_sum_yaxis, mda_col_label)
-        stype = sum_types[[input$allele_sum_type]]
+        yax = label2col(input$copy_sum_yaxis, mda_col_label)
+        stype = sum_types[[input$copy_sum_type]]
 
         p = ggplot(data, aes_string(x = xax, y = yax, color = xax))
         p = p + stat_summary(fun.y = stype, geom = "point")
-        p = p + xlab(input$allele_box_xaxis)
-        p = p + ylab(paste0(input$allele_sum_type, " of ", input$allele_box_yaxis))
+        p = p + xlab(input$copy_box_xaxis)
+        p = p + ylab(paste0(input$copy_sum_type, " of ", input$copy_box_yaxis))
         p = p + theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-        if ( input$allele_sum_lm ) {
-            l = dataLm_allele_sum(input)
+        if ( input$copy_sum_lm ) {
+            l = dataLm_copy_sum(input)
             regr = l[[1]]$coefficients
             sdata = l[[2]]
             p = p + geom_abline(intercept = regr[1], slope = regr[2], linetype = 2)
@@ -1244,37 +1244,37 @@ server = function(input, output) {
         p
     }
 
-    output$allele_sumPlot = renderPlotly({ dataPlot_allele_sum(input) })
+    output$copy_sumPlot = renderPlotly({ dataPlot_copy_sum(input) })
 
-    output$allele_summary_lm = renderPrint({ dataLm_allele_sum(input)[[1]] })
+    output$copy_summary_lm = renderPrint({ dataLm_copy_sum(input)[[1]] })
 
-    output$allele_sum_dl = downloadHandler(
+    output$copy_sum_dl = downloadHandler(
         filename = function() {
-        x = label2col(input$allele_sum_xaxis, mda_col_label)
-        y = label2col(input$allele_sum_yaxis, mda_col_label)
-            paste0(x,".", y, ".allele_sum.pdf")
+        x = label2col(input$copy_sum_xaxis, mda_col_label)
+        y = label2col(input$copy_sum_yaxis, mda_col_label)
+            paste0(x,".", y, ".copy_sum.pdf")
         },
         content = function(file) {
             pdf(file, height = 8, width = 16)
-            print(dataPlot_allele_sum(input))
+            print(dataPlot_copy_sum(input))
             dev.off()
         }
     )
 
-    dataPlot_allele_scatter = function(input) {
-        data = select_allele_data(input)
+    dataPlot_copy_scatter = function(input) {
+        data = select_copy_data(input)
 
         # Identify axes
-        xax = label2col(input$allele_scat_xaxis, mda_col_label)
-        yax = label2col(input$allele_scat_yaxis, mda_col_label)
-        col = label2col(input$allele_scat_color, mda_col_label)
+        xax = label2col(input$copy_scat_xaxis, mda_col_label)
+        yax = label2col(input$copy_scat_yaxis, mda_col_label)
+        col = label2col(input$copy_scat_color, mda_col_label)
         data[, col] = factor(data[, col])
         data[, col] = order_data(data[, col], col)
 
         p = ggplot(data, aes_string(x = xax, y = yax, color = col)) + geom_point()
-        p = p + xlab(input$allele_scat_xaxis) + ylab(input$allele_scat_yaxis)
+        p = p + xlab(input$copy_scat_xaxis) + ylab(input$copy_scat_yaxis)
 
-        if ( input$allele_scat_lm ) {
+        if ( input$copy_scat_lm ) {
             regr = summary(lm(data[, yax] ~ data[, xax]))$coefficients
             p = p + geom_abline(intercept = regr[1], slope = regr[2], linetype = 2)
         }
@@ -1282,72 +1282,72 @@ server = function(input, output) {
         p
     }
 
-    output$allele_scatterPlot = renderPlotly({ dataPlot_allele_scatter(input) })
+    output$copy_scatterPlot = renderPlotly({ dataPlot_copy_scatter(input) })
 
-    output$allele_scat_dl = downloadHandler(
+    output$copy_scat_dl = downloadHandler(
         filename = function() {
-            x = label2col(input$allele_scat_xaxis, mda_col_label)
-            y = label2col(input$allele_scat_yaxis, mda_col_label)
-            paste0(x,".", y, ".allele_scatter.pdf")
+            x = label2col(input$copy_scat_xaxis, mda_col_label)
+            y = label2col(input$copy_scat_yaxis, mda_col_label)
+            paste0(x,".", y, ".copy_scatter.pdf")
         },
         content = function(file) {
             pdf(file, height = 8, width = 16)
-            print(dataPlot_allele_scatter(input))
+            print(dataPlot_copy_scatter(input))
             dev.off()
         }
     )
 
-    output$allele_scatter_lm = renderPrint({
-        data = select_allele_data(input)
+    output$copy_scatter_lm = renderPrint({
+        data = select_copy_data(input)
 
         # Identify axes
-        xax = label2col(input$allele_scat_xaxis, mda_col_label)
-        yax = label2col(input$allele_scat_yaxis, mda_col_label)
+        xax = label2col(input$copy_scat_xaxis, mda_col_label)
+        yax = label2col(input$copy_scat_yaxis, mda_col_label)
         regr = summary(lm(data[, yax] ~ data[, xax]))
 
         return(regr)
     })
 
-    dataPlot_allele_hex = function(input) {
-        data = select_allele_data(input)
+    dataPlot_copy_hex = function(input) {
+        data = select_copy_data(input)
 
         # Identify axes
-        xax = label2col(input$allele_hex_xaxis, mda_col_label)
-        yax = label2col(input$allele_hex_yaxis, mda_col_label)
+        xax = label2col(input$copy_hex_xaxis, mda_col_label)
+        yax = label2col(input$copy_hex_yaxis, mda_col_label)
 
         p = ggplot(data, aes_string(x = xax, y = yax, color = xax)) + geom_hex()
-        p = p + xlab(input$allele_hex_xaxis) + ylab(input$allele_hex_yaxis)
+        p = p + xlab(input$copy_hex_xaxis) + ylab(input$copy_hex_yaxis)
 
         p
     }
 
-    output$allele_hexPlot = renderPlotly({ dataPlot_allele_hex(input) })
+    output$copy_hexPlot = renderPlotly({ dataPlot_copy_hex(input) })
 
-    output$allele_hex_dl = downloadHandler(
+    output$copy_hex_dl = downloadHandler(
         filename = function() {
-        x = label2col(input$allele_hex_xaxis, mda_col_label)
-        y = label2col(input$allele_hex_yaxis, mda_col_label)
-            paste0(x,".", y, ".allele_hex.pdf")
+        x = label2col(input$copy_hex_xaxis, mda_col_label)
+        y = label2col(input$copy_hex_yaxis, mda_col_label)
+            paste0(x,".", y, ".copy_hex.pdf")
         },
         content = function(file) {
             pdf(file, height = 8, width = 16)
-            print(dataPlot_allele_hex(input))
+            print(dataPlot_copy_hex(input))
             dev.off()
         }
     )
 
-    output$allele_table = renderDataTable({
-        data = select_allele_data(input)
+    output$copy_table = renderDataTable({
+        data = select_copy_data(input)
         return(data[, c("cell_type", "dataset", "File", "label", "chr", "set", "Channel", "cell_ID",
             "G1", "d_3d", "d_lamin", "d_lamin_norm", "d_centr", "d_centr_norm", "angle")])
     })
 
-    output$allele_table_dl = downloadHandler(
+    output$copy_table_dl = downloadHandler(
         filename = function() {
-            paste0("allele.tsv")
+            paste0("copy.tsv")
         },
         content = function(file) {
-            data = select_allele_data(input)
+            data = select_copy_data(input)
             data[, c("cell_type", "dataset", "File", "label", "chr", "set", "Channel", "cell_ID",
                 "G1", "d_3d", "d_lamin", "d_lamin_norm", "d_centr", "d_centr_norm", "angle")]
             write.table(data, file, row.names = F, quote = F, sep = "\t")
@@ -1421,7 +1421,7 @@ server = function(input, output) {
     # E/C dot sets plots ---------------------------------------------------------------------------
     
     dataPlot_ecset_dist = function(input) {
-        data = select_allele_data(input)
+        data = select_copy_data(input)
 
         # Identify x axis
         xax = label2col(input$ecset_dist_xaxis, mda_col_label)
@@ -1470,8 +1470,8 @@ ui <- fluidPage(
         selectInput("cell_phase", label = "Choose a cell sub-population",
             choices = c(
                 "All cells",
-                "Only cells with 1 allele",
-                "Only cells with 2 alleles"
+                "Only cells with 1 copy",
+                "Only cells with 2 copies"
             ), selected = "IMR90"),
         checkboxInput("g1only", "use only G1 cells.", FALSE)
     ),
@@ -1507,12 +1507,12 @@ ui <- fluidPage(
                         ),
                         tags$li(
                             strong("Inter-homologous"),
-                            span(": data on dot couples per channel, considered as alleles.",
-                                "Here alleles are defined in a channel-wise manner.")
+                            span(": data on dot couples per channel, considered as copies.",
+                                "Here copies are defined in a channel-wise manner.")
                         ),
                         tags$li(
                             strong("Inter-locus"),
-                            span(": data on dot triplets, belonging to the same allele.")
+                            span(": data on dot triplets, belonging to the same copy.")
                         ),
                         tags$li(
                             strong("Specific"),
@@ -1819,28 +1819,28 @@ ui <- fluidPage(
         ),
 
         # Allele data ------------------------------------------------------------------------------
-        tabPanel("Inter-homologous",
-            br(), p("Here you can find the data on allele couples; thus,",
-                strong("only cells with 2 alleles are considered here.")),
+        tabPanel("Inter-copy",
+            br(), p("Here you can find the data on copy couples; thus,",
+                strong("only cells with 2 copies are considered here.")),
 
-            conditionalPanel("input.cell_phase != 'Only cells with 1 allele'",
+            conditionalPanel("input.cell_phase != 'Only cells with 1 copy'",
                 tabsetPanel(
                     tabPanel("Distribution",
-                        plotlyOutput(outputId = "allele_distPlot"), br(),
+                        plotlyOutput(outputId = "copy_distPlot"), br(),
                         fluidRow(
                             column(6,
-                                downloadButton("allele_dist_dl", "Download plot"),
-                                checkboxInput("allele_dist_line",
+                                downloadButton("copy_dist_dl", "Download plot"),
+                                checkboxInput("copy_dist_line",
                                     "replace histogram with density.", FALSE)
                             ),
                             column(6,
-                                sliderInput("allele_dist_nbins", "Number of bins:",
+                                sliderInput("copy_dist_nbins", "Number of bins:",
                                     min = 1, max = 100, value = 30)
                             )
                         ),
                         fluidRow(
                             column(6,
-                                selectInput("allele_dist_xaxis", label = "X-axis",
+                                selectInput("copy_dist_xaxis", label = "X-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Absolute 3D distance [nm]"),
@@ -1849,18 +1849,18 @@ ui <- fluidPage(
                         )
                     ),
                     tabPanel("Boxplot", br(),
-                        p(downloadButton("allele_box_dl", "Download plot")),
-                        plotlyOutput(outputId = "allele_boxPlot"), br(),
+                        p(downloadButton("copy_box_dl", "Download plot")),
+                        plotlyOutput(outputId = "copy_boxPlot"), br(),
                         fluidRow(
                             column(6,
-                                selectInput("allele_box_yaxis", label = "Y-axis",
+                                selectInput("copy_box_yaxis", label = "Y-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Absolute 3D distance [nm]"),
                                 uiOutput("mda_real_descr_2")
                             ),
                             column(6,
-                                selectInput("allele_box_xaxis", label = "X-axis",
+                                selectInput("copy_box_xaxis", label = "X-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "factor")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Channel"),
@@ -1869,21 +1869,21 @@ ui <- fluidPage(
                         )
                     ),
                     tabPanel("Summary",
-                        plotlyOutput(outputId = "allele_sumPlot"), br(),
+                        plotlyOutput(outputId = "copy_sumPlot"), br(),
                         fluidRow(
                             column(6,
-                                checkboxInput("allele_sum_lm", "perform linear regression.", FALSE),
-                                conditionalPanel("input.allele_sum_lm",
-                                    verbatimTextOutput("allele_summary_lm")
+                                checkboxInput("copy_sum_lm", "perform linear regression.", FALSE),
+                                conditionalPanel("input.copy_sum_lm",
+                                    verbatimTextOutput("copy_summary_lm")
                                 )
                             ),
                             column(6,
-                                downloadButton("allele_sum_dl", "Download plot")
+                                downloadButton("copy_sum_dl", "Download plot")
                             )
                         ),
                         fluidRow(
                             column(6,
-                                selectInput("allele_sum_xaxis", label = "X-axis",
+                                selectInput("copy_sum_xaxis", label = "X-axis",
                                     choices = c(
                                         lapply(colnames(mda)[which(mda_col_type == "factor")],
                                             FUN = function(x) { mda_col_label[[x]] }),
@@ -1892,9 +1892,9 @@ ui <- fluidPage(
                                 uiOutput("mda_factor_descr_4")
                             ),
                             column(6,
-                                selectInput("allele_sum_type", label = "Summary measure (Y-axis)",
+                                selectInput("copy_sum_type", label = "Summary measure (Y-axis)",
                                     choices = names(sum_types), selected = "Variance"),
-                                selectInput("allele_sum_yaxis", label = "Y-axis",
+                                selectInput("copy_sum_yaxis", label = "Y-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Absolute 3D distance [nm]"),
@@ -1903,33 +1903,33 @@ ui <- fluidPage(
                         )
                     ),
                     tabPanel("Scatter",
-                        plotlyOutput(outputId = "allele_scatterPlot"), br(),
+                        plotlyOutput(outputId = "copy_scatterPlot"), br(),
                         fluidRow(
                             column(6,
-                                checkboxInput("allele_scat_lm",
+                                checkboxInput("copy_scat_lm",
                                     "perform linear regression.", FALSE),
-                                conditionalPanel("input.allele_scat_lm",
-                                    verbatimTextOutput("allele_scatter_lm")
+                                conditionalPanel("input.copy_scat_lm",
+                                    verbatimTextOutput("copy_scatter_lm")
                                 )
                             ),
                             column(6,
-                                downloadButton("allele_scat_dl", "Download plot")
+                                downloadButton("copy_scat_dl", "Download plot")
                             )
                         ),
                         fluidRow(
                             column(6,
-                                selectInput("allele_scat_xaxis", label = "X-axis",
+                                selectInput("copy_scat_xaxis", label = "X-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Absolute 3D distance [nm]"),
-                                selectInput("allele_scat_yaxis", label = "Y-axis",
+                                selectInput("copy_scat_yaxis", label = "Y-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Distance between normalized lamina layers [a.u.]"),
                                 uiOutput("mda_real_descr_3")
                             ),
                             column(6,
-                                selectInput("allele_scat_color", label = "Color",
+                                selectInput("copy_scat_color", label = "Color",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "factor")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Channel"),
@@ -1938,18 +1938,18 @@ ui <- fluidPage(
                         )
                     ),
                     tabPanel("Hexplot",
-                        plotlyOutput(outputId = "allele_hexPlot"), br(),
-                        p(downloadButton("allele_hex_dl", "Download plot")),
+                        plotlyOutput(outputId = "copy_hexPlot"), br(),
+                        p(downloadButton("copy_hex_dl", "Download plot")),
                         fluidRow(
                             column(6,
-                                selectInput("allele_hex_xaxis", label = "X-axis",
+                                selectInput("copy_hex_xaxis", label = "X-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Absolute 3D distance [nm]"),
                                 uiOutput("mda_real_descr_5")
                             ),
                             column(6,
-                                selectInput("allele_hex_yaxis", label = "Y-axis",
+                                selectInput("copy_hex_yaxis", label = "Y-axis",
                                     choices = lapply(colnames(mda)[which(mda_col_type == "real")],
                                     FUN = function(x) { mda_col_label[[x]] }),
                                     selected = "Distance between normalized lamina layers [a.u.]"),
@@ -1958,19 +1958,19 @@ ui <- fluidPage(
                         )
                     ),
                     tabPanel("Raw table", br(),
-                        p(downloadButton("allele_table_dl", "Download table")),
-                        dataTableOutput(outputId = "allele_table")
+                        p(downloadButton("copy_table_dl", "Download table")),
+                        dataTableOutput(outputId = "copy_table")
                     )
                 )
             ),
-            conditionalPanel("input.cell_phase == 'Only cells with 1 allele'",
+            conditionalPanel("input.cell_phase == 'Only cells with 1 copy'",
                 br(),
-                p("Allele couple data are not available when selecting only cells with one allele.")
+                p("Allele couple data are not available when selecting only cells with one copy.")
             )
         ),
 
         # Locus data -------------------------------------------------------------------------------
-        tabPanel("Intra-homologous",
+        tabPanel("Intra-copy",
             br(), p("Here you can find the data on probe triplets.")
         ),
 
@@ -2016,11 +2016,11 @@ ui <- fluidPage(
                         "'e' probes are 'terminal', close to telomeres.",
                         "'c' probes are 'central', further from telomeres."),
                     
-                    br(), p("Here you can find the data on allele couples; thus,",
-                        strong("only cells with 2 alleles are considered here."),
-                        "Moreover, here alleles are considered at the single-probe level."),
+                    br(), p("Here you can find the data on copy couples; thus,",
+                        strong("only cells with 2 copies are considered here."),
+                        "Moreover, here copies are considered at the single-probe level."),
 
-                    conditionalPanel("input.cell_phase != 'Only cells with 1 allele'",
+                    conditionalPanel("input.cell_phase != 'Only cells with 1 copy'",
                         tabsetPanel(
                             tabPanel("Overall distribution",
                                 plotlyOutput(outputId = "ecset_distPlot"), br(),
